@@ -8,20 +8,35 @@ Observe:
 -angular velocity
 -linear acceleration
 ## PROJECT STRUCTURE 
+## 📁 Project Structure
+
+```
 MAR_IMU
 │
 ├── robot_description
-│ └── urdf
-│ └── mobile_robot.urdf
+│   ├── urdf
+│   │   └── mobile_robot.urdf
+│   │
+│   └── meshes
+│       └── (3D models if added later)
 │
 ├── simulation
-│ └── (Gazebo world and launch files)
+│   ├── worlds
+│   │   └── imu_world.world
+│   │
+│   └── launch
+│       └── spawn_robot.launch.py
 │
 ├── scripts
-│ └── (ROS nodes for IMU data processing)
+│   ├── imu_listener.py
+│   └── robot_controller.py
 │
-└── docs
-└── (documentation and notes)
+├── docs
+│   └── project_notes.md
+│
+├── README.md
+└── .gitignore
+```
 ## PLANNED WORKFLOW
 1. Create the robot model using URDF  
 2. Spawn the robot in Gazebo simulation  
