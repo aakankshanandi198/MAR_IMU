@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot name="mobile_robot">
 
-  <!-- Base Link (Robot Body) -->
+  <!-- ================= BASE LINK ================= -->
   <link name="base_link">
     <visual>
       <geometry>
@@ -29,7 +29,7 @@
   </link>
 
 
-  <!-- Left Wheel -->
+  <!-- ================= LEFT WHEEL ================= -->
   <link name="left_wheel">
     <visual>
       <geometry>
@@ -39,6 +39,19 @@
         <color rgba="0 0 0 1"/>
       </material>
     </visual>
+
+    <collision>
+      <geometry>
+        <cylinder radius="0.05" length="0.02"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0"
+               iyy="0.01" iyz="0"
+               izz="0.01"/>
+    </inertial>
   </link>
 
   <joint name="left_wheel_joint" type="continuous">
@@ -49,7 +62,7 @@
   </joint>
 
 
-  <!-- Right Wheel -->
+  <!-- ================= RIGHT WHEEL ================= -->
   <link name="right_wheel">
     <visual>
       <geometry>
@@ -59,6 +72,19 @@
         <color rgba="0 0 0 1"/>
       </material>
     </visual>
+
+    <collision>
+      <geometry>
+        <cylinder radius="0.05" length="0.02"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0"
+               iyy="0.01" iyz="0"
+               izz="0.01"/>
+    </inertial>
   </link>
 
   <joint name="right_wheel_joint" type="continuous">
@@ -69,8 +95,15 @@
   </joint>
 
 
-  <!-- IMU Sensor -->
-  <link name="imu_link"/>
+  <!-- ================= IMU LINK ================= -->
+  <link name="imu_link">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0"
+               iyy="0.001" iyz="0"
+               izz="0.001"/>
+    </inertial>
+  </link>
 
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/>
@@ -78,5 +111,59 @@
     <origin xyz="0 0 0.05"/>
   </joint>
 
+
+  <!-- ================= GAZEBO IMU SENSOR ================= -->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>100.0</update_rate>
+      <visualize>true</visualize>
+
+      <imu>
+        <angular_velocity>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+            </noise>
+          </z>
+        </angular_velocity>
+
+        <linear_acceleration>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+            </noise>
+          </z>
+        </linear_acceleration>
+      </imu>
+
+    </sensor>
+  </gazebo>
 
 </robot>
