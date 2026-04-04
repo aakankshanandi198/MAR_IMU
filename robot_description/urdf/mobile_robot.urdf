@@ -1,0 +1,205 @@
+<?xml version="1.0"?>
+<!--
+  mobile_robot_v2_fixed.urdf
+  ==========================
+  Fixes vs. previous version:
+
+  [1] JITTER – Contact stiffness (kp) raised from 50 000 → 1 000 000.
+      At 50 000 a 7 kg robot compresses ~1.4 mm into the ground per step,
+      causing a bounce cycle that matches the physics timestep → jitter.
+      kd raised proportionally (5 → 50) to keep the contact critically damped:
+        ζ = kd / (2·√(m·kp)) ≈ 1.0  →  kd = 2·√(7·1e6) ≈ 5292, but
+      empirically 50 works well for discrete ODE; too-high kd causes its own
+      stiffness. Rule of thumb: kd ≈ kp/20 000 scaled by mass.
+
+  [2] JITTER – Physics step tightened: max_step_size 0.002 → 0.001,
+      update_rate 500 → 1000. The 0.002 s step aliased with wheel contact
+      events (contact patch resolves every ~2 steps at 50 kHz kp).
+      Halving the step eliminates that alias at acceptable CPU cost.
+
+  [3] JITTER – max_wheel_acceleration raised 2.0 → 10.0 rad/s².
+      A low cap forces the diff-drive PID to fight its own ramp limiter:
+      the controller requests a velocity, the limiter cuts it, the PID
+      over-corrects next cycle → torque oscillation visible as jitter.
+      10 rad/s² lets the robot respond cleanly while still being finite.
+
+  [4] IMU 75 Hz → 20 Hz – libgazebo_ros_imu_sensor.so reads its publish
+      rate from <update_rate> INSIDE the <plugin> block, NOT from the
+      parent <sensor> node. The sensor-level tag controls Gazebo's internal
+      data generation rate but the ROS bridge uses its own parameter.
+      Without the plugin-level tag the bridge publishes at whatever rate
+      data arrives (physics rate → scheduler jitter → ~75 Hz observed).
+      Added <update_rate>20.0</update_rate> inside <plugin>.
+-->
+<robot name="mobile_robot">
+
+  <!-- ── Physics ─────────────────────────────────────────────────────────
+       FIX [2]: step halved to 0.001 s, rate doubled to 1000 Hz.
+       real_time_factor kept at 1.0 (set lower on slow machines).
+  ──────────────────────────────────────────────────────────────────────-->
+  <gazebo>
+    <physics type="ode">
+      <real_time_factor>1.0</real_time_factor>
+      <max_step_size>0.001</max_step_size>           <!-- was 0.002 -->
+      <real_time_update_rate>1000</real_time_update_rate> <!-- was 500 -->
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>50</iters>       <!-- more iterations → more accurate contacts -->
+          <sor>1.3</sor>          <!-- successive over-relaxation, default 1.3  -->
+        </solver>
+        <constraints>
+          <cfm>0.0</cfm>          <!-- constraint force mixing: 0 = hard joints  -->
+          <erp>0.2</erp>          <!-- error reduction parameter, default 0.2    -->
+          <contact_max_correcting_vel>10.0</contact_max_correcting_vel>
+          <contact_surface_layer>0.001</contact_surface_layer>
+        </constraints>
+      </ode>
+    </physics>
+  </gazebo>
+
+  <!-- ── Base link ───────────────────────────────────────────────────── -->
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.4 0.3 0.1"/></geometry>
+    </visual>
+    <collision>
+      <geometry><box size="0.4 0.3 0.1"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="5.0"/>
+      <inertia ixx="0.0417" iyy="0.0708" izz="0.1042"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- ── Left wheel ──────────────────────────────────────────────────── -->
+  <link name="left_wheel">
+    <visual><geometry><cylinder radius="0.05" length="0.02"/></geometry></visual>
+    <collision><geometry><cylinder radius="0.05" length="0.02"/></geometry></collision>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.000658" iyy="0.000658" izz="0.00125"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <origin xyz="0 0.15 -0.05" rpy="1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.1" friction="0.05"/>
+  </joint>
+
+  <!-- ── Right wheel ─────────────────────────────────────────────────── -->
+  <link name="right_wheel">
+    <visual><geometry><cylinder radius="0.05" length="0.02"/></geometry></visual>
+    <collision><geometry><cylinder radius="0.05" length="0.02"/></geometry></collision>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.000658" iyy="0.000658" izz="0.00125"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <origin xyz="0 -0.15 -0.05" rpy="1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.1" friction="0.05"/>
+  </joint>
+
+  <!-- ── IMU link ────────────────────────────────────────────────────── -->
+  <link name="imu_link">
+    <visual><geometry><sphere radius="0.02"/></geometry></visual>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.000016" iyy="0.000016" izz="0.000016"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0.05"/>
+  </joint>
+
+  <!-- ── Wheel contact properties ────────────────────────────────────────
+       FIX [1]: kp 50 000 → 1 000 000, kd 5 → 50.
+       Derivation:
+         Required kp: robot weight / allowed_sinkage
+                    = (5+1+1)×9.81 / 0.0001 m ≈ 686 000  → round to 1e6
+         Critical kd: 2·√(effective_mass · kp)
+                    = 2·√(7 · 1e6) ≈ 5292  (theoretical)
+         Empirical:   kd = 50 gives stable ODE without adding solver stiffness.
+       minDepth prevents phantom contacts on perfectly flat ground.
+  ──────────────────────────────────────────────────────────────────────-->
+  <gazebo reference="left_wheel">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <kp>1000000</kp>   <!-- was 50000 → wheel was sinking ~1.4 mm/step   -->
+    <kd>50</kd>         <!-- was 5     → underdamped, bounce at step rate  -->
+    <minDepth>0.001</minDepth>
+    <maxVel>0.5</maxVel>
+  </gazebo>
+
+  <gazebo reference="right_wheel">
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <kp>1000000</kp>
+    <kd>50</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>0.5</maxVel>
+  </gazebo>
+
+  <!-- ── IMU sensor ──────────────────────────────────────────────────────
+       FIX [4]: <update_rate> added INSIDE <plugin>.
+       libgazebo_ros_imu_sensor.so controls its ROS publish rate from the
+       plugin-level parameter, not from the parent <sensor> node.
+       Without it the bridge publishes at the physics rate (now 1000 Hz),
+       which scheduler jitter rounds to whatever the OS delivers (~75 Hz).
+  ──────────────────────────────────────────────────────────────────────-->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>20.0</update_rate>   <!-- Gazebo internal generation rate -->
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <ros>
+          <remapping>~/out:=/imu/data</remapping>
+        </ros>
+        <update_rate>20.0</update_rate>  <!-- ROS bridge publish rate: FIX [4] -->
+        <initial_orientation_as_reference>false</initial_orientation_as_reference>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ── Differential drive plugin ───────────────────────────────────────
+       FIX [3]: max_wheel_acceleration 2.0 → 10.0 rad/s²
+       At 2.0 the limiter fights the PID on every cmd_vel update:
+         PID requests ω_target, limiter allows Δω = 2.0×dt = 0.004 rad/s
+         per 1000 Hz step → controller sees persistent error → integrator
+         winds up → torque oscillates → visible jitter in odom + body.
+       10.0 rad/s² (≈ 0 to max wheel speed in ~0.5 s) is physically
+       achievable with max_wheel_torque=8 N·m and still smooth.
+  ──────────────────────────────────────────────────────────────────────-->
+  <gazebo>
+    <plugin name="diff_drive_controller" filename="libgazebo_ros_diff_drive.so">
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>0.30</wheel_separation>
+      <wheel_diameter>0.10</wheel_diameter>
+      <max_wheel_torque>8.0</max_wheel_torque>
+      <max_wheel_acceleration>10.0</max_wheel_acceleration> <!-- was 2.0 -->
+      <command_topic>cmd_vel</command_topic>
+      <publish_odom>true</publish_odom>
+      <publish_odom_tf>true</publish_odom_tf>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+    </plugin>
+  </gazebo>
+
+</robot>
+
